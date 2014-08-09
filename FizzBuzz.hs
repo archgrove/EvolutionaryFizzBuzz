@@ -1,7 +1,7 @@
-module FizzBuzz where
+module Main where
 
+import System.Environment
 import System.Random
-import Data.Char
 import Control.Parallel
 import Control.Parallel.Strategies
 import Debug.Trace
@@ -108,9 +108,9 @@ step Subtract pc s = case s of
     Left (Nothing, pc + 1, NumberValue (v1 - v2) : rest)
   _ -> Right "Subtract without 2 integer operands"
 step Modulo pc s = case s of
-  (NumberValue v2) : (NumberValue v1) : rest -> 
+  (NumberValue v2) : (NumberValue v1) : rest | v2 > 0 -> 
     Left (Nothing, pc + 1, NumberValue (mod v1 v2) : rest)
-  _ -> Right "Modulo without 2 integer operands"
+  _ -> Right "Modulo without 2 integer operands, the second positive"
 step Concatenate pc s = case s of
   (TextValue v1) : (TextValue v2) : rest -> 
     Left (Nothing, pc + 1, TextValue (v1 ++ v2) : rest)
@@ -231,8 +231,10 @@ evolve n p = do
 
 main :: IO ()
 main = do
+  args <- getArgs
+  putStrLn ((head args) ++ " generations of FIZZ BUZZ")
   p <- randomProgram
   putStrLn (show p)
-  end <- evolve 50000 p
+  end <- evolve (read $ head args :: Int) p
   putStrLn (show (execute end))
   putStrLn (show end)
