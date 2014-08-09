@@ -81,68 +81,63 @@ fizzBuzz = [PushNumber 1, -- 0
   PushNumber 1, -- 38
   JumpLesser] -- 39
 
-step :: Instruction -> PC -> Stack -> Either (Maybe String, PC, Stack) Error
-step (PushText val) pc s = Left (Nothing, pc + 1, (TextValue val) : s)
-step (PushNumber val) pc s = Left (Nothing, pc + 1, (NumberValue val) : s)
+step :: Instruction -> PC -> Stack -> (Maybe String, PC, Stack)
+step (PushText val) pc s = (Nothing, pc + 1, (TextValue val) : s)
+step (PushNumber val) pc s = (Nothing, pc + 1, (NumberValue val) : s)
 step Pop pc s = case s of
-  [] -> Right "Cannot pop the empty stack"
-  v : rest -> Left (Nothing, pc + 1, rest)
+  v : rest -> (Nothing, pc + 1, rest)
+  _ -> (Nothing, pc + 1, s)
 step JumpGreater pc s = case s of
   (NumberValue v3) : (NumberValue v2) : NumberValue (v1) : rest -> 
-    if v1 > v2 then Left (Nothing, v3, rest) else Left(Nothing, pc + 1, rest)
-  _ -> Right "Jump without 3 integer operands"
+    if v1 > v2 then (Nothing, v3, rest) else (Nothing, pc + 1, rest)
+  _ -> (Nothing, pc + 1, s)
 step JumpLesser pc s = case s of
   (NumberValue v3) : (NumberValue v2) : NumberValue (v1) : rest -> 
-    if v1 < v2 then Left (Nothing, v3, rest) else Left(Nothing, pc + 1, rest)
-  _ -> Right "Jump without 3 integer operands"
+    if v1 < v2 then (Nothing, v3, rest) else (Nothing, pc + 1, rest)
+  _ -> (Nothing, pc + 1, s)
 step PrintLine pc s = case s of
-  [] -> Right "Cannot print from the empty stack"
-  (NumberValue v) : rest -> Left (Just (show v), pc + 1, rest)
-  (TextValue v) : rest -> Left (Just v, pc + 1, rest)
+  (NumberValue v) : rest -> (Just (show v), pc + 1, rest)
+  (TextValue v) : rest -> (Just v, pc + 1, rest)
+  _ -> (Nothing, pc + 1, s)
 step Add pc s = case s of
   (NumberValue v1) : (NumberValue v2) : rest -> 
-    Left (Nothing, pc + 1, NumberValue (v1 + v2) : rest)
-  _ -> Right "Add without 2 integer operands"
+    (Nothing, pc + 1, NumberValue (v1 + v2) : rest)
+  _ -> (Nothing, pc + 1, s)
 step Subtract pc s = case s of
   (NumberValue v1) : (NumberValue v2) : rest -> 
-    Left (Nothing, pc + 1, NumberValue (v1 - v2) : rest)
-  _ -> Right "Subtract without 2 integer operands"
+    (Nothing, pc + 1, NumberValue (v1 - v2) : rest)
+  _ -> (Nothing, pc + 1, s)
 step Modulo pc s = case s of
   (NumberValue v2) : (NumberValue v1) : rest | v2 > 0 -> 
-    Left (Nothing, pc + 1, NumberValue (mod v1 v2) : rest)
-  _ -> Right "Modulo without 2 integer operands, the second positive"
+    (Nothing, pc + 1, NumberValue (mod v1 v2) : rest)
+  _ -> (Nothing, pc + 1, s)
 step Concatenate pc s = case s of
   (TextValue v1) : (TextValue v2) : rest -> 
-    Left (Nothing, pc + 1, TextValue (v1 ++ v2) : rest)
-  _ -> Right "Concatenate without 2 string operands"
+    (Nothing, pc + 1, TextValue (v1 ++ v2) : rest)
+  _ -> (Nothing, pc + 1, s)
 step Copy pc s = case s of
-  v : rest -> 
-    Left (Nothing, pc + 1, v : v : rest)
-  all -> Left (Nothing, pc + 1, all)
+  v : rest -> (Nothing, pc + 1, v : v : rest)
+  all -> (Nothing, pc + 1, all)
 step Jump pc s = case s of
-  (NumberValue v) : rest -> 
-    Left (Nothing, v, rest)
-  all -> Left (Nothing, pc + 1, all)
+  (NumberValue v) : rest -> (Nothing, v, rest)
+  all -> (Nothing, pc + 1, all)
 
-execute :: Program -> Either Output Error
+execute :: Program -> Output
 -- Execute 500 steps of execution
 execute p = executeWithState 500 p 0 [] []
   where
   executeWithState :: Int -> Program -> PC ->
-                      Stack -> Output -> Either Output Error
+                      Stack -> Output -> Output
 --  executeWithState steps p pc s o | trace ((show pc) ++ " : " ++ (show s)) False = undefined
   executeWithState steps p pc s o = 
     -- If the program counter is off the program, terminate with output
     -- Only allow steps execution steps
-    if steps == 0 then Left o else
-      if pc >= length p || pc < 0 then
-        Left o
+    if steps == 0 then o else
+      if pc >= length p || pc < 0 then o
       else 
-        case (step (p !! pc) pc s) of
-          Left (result, newPc, newStack) -> case result of 
-            Just s -> executeWithState (steps - 1) p newPc newStack (s : o)
-            Nothing -> executeWithState (steps - 1) p newPc newStack o
-          Right error -> Right error
+        let (result, newPc, newStack) = (step (p !! pc) pc s) in case result of 
+          Just s -> executeWithState (steps - 1) p newPc newStack (s : o)
+          Nothing -> executeWithState (steps - 1) p newPc newStack o
 
 randomProgram :: IO Program
 randomProgram = do
@@ -214,13 +209,9 @@ mutate p1 = do
 
 compete :: Program -> Program -> Program
 compete p1 p2 = 
-  let r1 = execute p1 in
-  let r2 = execute p2 in
-  case (r1, r2) of
-    (Right _, Right _) -> p1
-    (Left _, Right _) -> p1
-    (Right _, Left _) -> p2
-    (Left o1, Left o2) -> if (length o1 > length o2) then p1 else p2
+  let o1 = execute p1 in
+  let o2 = execute p2 in
+    if (length o1 > length o2) then p1 else p2
 
 evolve :: Int -> Program -> IO Program
 evolve 0 p = return p
@@ -231,10 +222,15 @@ evolve n p = do
 
 main :: IO ()
 main = do
-  args <- getArgs
-  putStrLn ((head args) ++ " generations of FIZZ BUZZ")
+  gens <- getGens 1000
+  putStrLn ((show gens) ++ " generations of FIZZ BUZZ")
   p <- randomProgram
   putStrLn (show p)
-  end <- evolve (read $ head args :: Int) p
+  end <- evolve gens p
   putStrLn (show (execute end))
   putStrLn (show end)
+
+getGens :: Int -> IO Int
+getGens d = do
+  args <- getArgs
+  return (if length args == 1 then (read $ head args) else d)
